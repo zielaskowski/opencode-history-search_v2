@@ -1,5 +1,9 @@
 # opencode-history-search
 
+Upgrade to opencodeV2
+AI generated, alternatively wait for PR being accepted in upstream repo
+
+
 [![npm version](https://img.shields.io/npm/v/opencode-history-search.svg)](https://www.npmjs.com/package/opencode-history-search)
 [![npm downloads](https://img.shields.io/npm/dm/opencode-history-search.svg)](https://www.npmjs.com/package/opencode-history-search)
 [![Tests](https://github.com/joeyism/opencode-history-search/workflows/Tests/badge.svg)](https://github.com/joeyism/opencode-history-search/actions)

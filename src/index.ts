@@ -5,7 +5,11 @@ import { searchFuzzy } from "./search/fuzzy";
 import { parseDateFilter, filterByDate } from "./search/date-filter";
 import { traceFile } from "./search/file-trace";
 import { searchMultiterm } from "./search/multiterm-sql";
-import { formatResults, formatTraceResults, formatMultitermResults } from "./format";
+import {
+  formatResults,
+  formatTraceResults,
+  formatMultitermResults,
+} from "./format";
 
 const historySearch = tool({
   description: `Search through past conversation histories. Use searchAllProjects=true to search ALL projects on this machine. Searches session titles, message content, tool invocations, and file paths.
@@ -21,15 +25,21 @@ Supports keyword search, regex patterns, fuzzy search, multi-term AND search, da
     query: tool.schema
       .string()
       .optional()
-      .describe("Search query (keyword, regex pattern, or fuzzy search term). Required unless filePath or terms is provided."),
+      .describe(
+        "Search query (keyword, regex pattern, or fuzzy search term). Required unless filePath or terms is provided.",
+      ),
     terms: tool.schema
       .array(tool.schema.string())
       .optional()
-      .describe("Array of terms for multi-term AND search. Returns sessions containing ALL terms anywhere in the session (title, messages, tools, file paths). Use when the user wants sessions matching multiple concepts (e.g., [\"truck\", \"vertex\", \"gemini\"]). Requires 2+ terms for multi-term path; 1 term falls back to single-term query. SQLite-only. Case-insensitive substring matching."),
+      .describe(
+        'Array of terms for multi-term AND search. Returns sessions containing ALL terms anywhere in the session (title, messages, tools, file paths). Use when the user wants sessions matching multiple concepts (e.g., ["truck", "vertex", "gemini"]). Requires 2+ terms for multi-term path; 1 term falls back to single-term query. SQLite-only. Case-insensitive substring matching.',
+      ),
     filePath: tool.schema
       .string()
       .optional()
-      .describe("File path to trace touch history (e.g., 'src/auth.ts'). If provided, query, mode, regex, caseSensitive, fuzzyThreshold, and role are ignored."),
+      .describe(
+        "File path to trace touch history (e.g., 'src/auth.ts'). If provided, query, mode, regex, caseSensitive, fuzzyThreshold, and role are ignored.",
+      ),
     searchAllProjects: tool.schema
       .boolean()
       .optional()
@@ -78,7 +88,9 @@ Supports keyword search, regex patterns, fuzzy search, multi-term AND search, da
 
   async execute(args) {
     if (!args.query && !args.filePath && !args.terms) {
-      throw new Error("Either 'query', 'terms', or 'filePath' must be provided.");
+      throw new Error(
+        "Either 'query', 'terms', or 'filePath' must be provided.",
+      );
     }
 
     if (args.terms !== undefined) {
@@ -88,7 +100,9 @@ Supports keyword search, regex patterns, fuzzy search, multi-term AND search, da
       if (args.terms.length === 1) {
         args.query = args.terms[0];
       } else {
-        const projectID = args.searchAllProjects ? null : await getCurrentProjectID();
+        const projectID = args.searchAllProjects
+          ? null
+          : await getCurrentProjectID();
         let matches = await searchMultiterm(projectID, args.terms, {
           limit: args.limit,
         });
@@ -100,7 +114,9 @@ Supports keyword search, regex patterns, fuzzy search, multi-term AND search, da
       }
     }
 
-    const projectID = args.searchAllProjects ? null : await getCurrentProjectID();
+    const projectID = args.searchAllProjects
+      ? null
+      : await getCurrentProjectID();
 
     if (args.filePath) {
       let matches = await traceFile(projectID, args.filePath, {
@@ -142,8 +158,52 @@ Supports keyword search, regex patterns, fuzzy search, multi-term AND search, da
   },
 });
 (historySearch as any).id = "opencode-history-search";
-(historySearch as any).server = async (_input?: unknown, _options?: unknown) => ({
+(historySearch as any).server = async (
+  _input?: unknown,
+  _options?: unknown,
+) => ({
   tool: { "history-search": historySearch },
 });
+
+interface V2ToolEditor {
+  add(tool: {
+    name: string;
+    description: string;
+    input: unknown;
+    execute: (
+      input: any,
+      context: { signal: AbortSignal },
+    ) => Promise<{ content?: string; metadata?: Record<string, unknown> }>;
+  }): void;
+}
+interface V2PluginContext {
+  tool?: {
+    transform(callback: (editor: V2ToolEditor) => void): Promise<unknown>;
+  };
+}
+(historySearch as any).setup = async (ctx: V2PluginContext) => {
+  if (!ctx?.tool?.transform) return;
+  await ctx.tool.transform((editor) => {
+    editor.add({
+      name: "history-search",
+      description: historySearch.description,
+      input: tool.schema.object(historySearch.args),
+      execute: async (input, context) => {
+        const result = await historySearch.execute(input, {
+          sessionID: "",
+          messageID: "",
+          agent: "",
+          directory: "",
+          worktree: "",
+          abort: context.signal,
+          metadata: () => {},
+          ask: async () => {},
+        });
+        if (typeof result === "string") return { content: result };
+        return { content: result.output, metadata: result.metadata };
+      },
+    });
+  });
+};
 
 export default historySearch;
